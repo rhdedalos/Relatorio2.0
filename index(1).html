@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard RH Dédalos</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{--bg:#07101f;--card:#0e1a2d;--card2:#13233a;--line:#2b3d59;--txt:#f3f6fb;--muted:#aab6c8;--blue:#3c9ed2;--red:#d96578;--green:#35c89b}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#07101f,#0c172a);color:var(--txt);font-family:Arial,sans-serif}header{padding:22px 28px;border-bottom:1px solid var(--line);background:#091323;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}h1{margin:0;font-size:24px}h2{font-size:18px;margin:0 0 15px}.muted{color:var(--muted);font-size:13px}.wrap{max-width:1500px;margin:auto;padding:20px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.tab{padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--muted);cursor:pointer}.tab.active,.tab:hover{background:var(--blue);color:#fff}.page{display:none}.page.active{display:block}.card{background:rgba(14,26,45,.97);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 8px 25px #0003}.grid{display:grid;gap:15px}.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(350px,1fr))}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end}.kpi{font-size:27px;font-weight:bold;margin-top:7px}.klabel{font-size:12px;color:var(--muted)}label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}input,select{width:100%;padding:10px;border-radius:7px;border:1px solid var(--line);background:#091526;color:#fff}button{border:0;border-radius:7px;padding:10px 14px;background:var(--blue);color:#fff;font-weight:bold;cursor:pointer}.secondary{background:#263752}.danger{background:var(--red)}.ok{background:var(--green);color:#06111d}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.notice{padding:12px 14px;border-left:4px solid var(--blue);background:#152b3e;border-radius:7px;font-size:13px;margin-bottom:14px}.chart{height:390px;position:relative}.chart.tall{height:650px}.table{overflow:auto;max-height:560px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left}th{background:#0a1526;position:sticky;top:0}.file{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}.empty{text-align:center;color:var(--muted);padding:28px}.status{margin-top:14px;padding:12px;border-radius:8px;background:#091526;min-height:44px;white-space:pre-wrap}.presentation{background:#fff;color:#172236;border-radius:14px;padding:25px}.presentation .card{background:#f5f7fa;color:#172236;border-color:#d9e0e9}.presentation .muted{color:#5d6b7f}
+@media(max-width:700px){.wrap{padding:12px}.g2{grid-template-columns:1fr}.chart.tall{height:520px}}
+</style>
+</head>
+<body>
+<header>
+<div><h1>📊 Dashboard RH — Dédalos</h1><div class="muted">Carregue os PDFs e Excels. O sistema processa e atualiza o dashboard automaticamente.</div></div>
+<div class="actions"><button class="secondary" onclick="downloadBackup()">⬇ Backup</button><label class="secondary" style="padding:10px 14px;border-radius:7px;cursor:pointer">⬆ Restaurar<input type="file" accept=".json" hidden onchange="restoreBackup(event)"></label></div>
+</header>
+<div class="wrap">
+<div class="tabs">
+<div class="tab active" data-page="dashboard">📊 Dashboard</div>
+<div class="tab" data-page="importar">📥 Carregar arquivos</div>
+<div class="tab" data-page="periodos">📅 Períodos</div>
+<div class="tab" data-page="comparar">🔄 Comparar</div>
+<div class="tab" data-page="apresentar">🎯 Apresentação</div>
+</div>
+
+<section id="dashboard" class="page active">
+<div class="card" style="margin-bottom:15px"><div class="form">
+<div><label>Período</label><select id="periodFilter" onchange="renderDashboard()"></select></div>
+<div><label>Empresa</label><select id="companyFilter" onchange="renderDashboard()"><option value="">Todas</option></select></div>
+<div><label>Departamento</label><select id="departmentFilter" onchange="renderDashboard()"><option value="">Todos</option></select></div>
+</div></div>
+<div id="kpis" class="grid g4"></div>
+<div class="grid g2" style="margin-top:15px">
+<div class="card"><h2>Funcionários por departamento</h2><div class="chart"><canvas id="deptChart"></canvas></div></div>
+<div class="card"><h2>Indicadores do período</h2><div class="chart"><canvas id="indicatorChart"></canvas></div></div>
+</div>
+<div class="card" style="margin-top:15px"><h2>Horas extras por funcionário — todos os nomes</h2><div class="chart tall"><canvas id="extraChart"></canvas></div></div>
+<div class="card" style="margin-top:15px"><h2>Faltas por funcionário — todos os nomes</h2><div class="chart tall"><canvas id="absenceChart"></canvas></div></div>
+</section>
+
+<section id="importar" class="page">
+<div class="card">
+<h2>📥 Carregar arquivos e gerar dashboard</h2>
+<div class="notice">Selecione todos os PDFs e Excels que deseja analisar. Depois clique no botão. O sistema mostra o andamento do processamento e atualiza o dashboard ao final.</div>
+<div class="form">
+<div><label>PDFs e Excels</label><input id="fileInput" type="file" multiple accept=".pdf,.xlsx,.xls,.csv"></div>
+<div><button onclick="processFiles()">🚀 CARREGAR E GERAR DASHBOARD</button></div>
+</div>
+<div id="status" class="status">Aguardando arquivos.</div>
+</div>
+<div class="card" style="margin-top:15px"><h2>Arquivos processados</h2><div id="filesList"></div></div>
+</section>
+
+<section id="periodos" class="page"><div class="card"><h2>📅 Períodos</h2><div id="periodsList"></div></div></section>
+<section id="comparar" class="page"><div class="card"><h2>🔄 Comparar períodos</h2><div id="compareList" class="actions"></div><button onclick="renderComparison()">📈 Gerar comparação</button></div><div class="card" style="margin-top:15px"><div class="chart"><canvas id="comparisonChart"></canvas></div></div></section>
+<section id="apresentar" class="page">
+<div class="card"><h2>🎯 Apresentação para gestores</h2><div class="form">
+<div><label>Período</label><select id="presentationPeriod"></select></div>
+<div><label>Empresa</label><select id="presentationCompany"><option value="">Todas</option></select></div>
+<div><label>Departamento</label><select id="presentationDepartment"><option value="">Todos</option></select></div>
+</div>
+<div class="actions">
+<label><input class="metric" type="checkbox" value="summary" checked> Resumo</label>
+<label><input class="metric" type="checkbox" value="department" checked> Departamentos</label>
+<label><input class="metric" type="checkbox" value="extra" checked> Horas extras</label>
+<label><input class="metric" type="checkbox" value="absence" checked> Faltas</label>
+</div>
+<button onclick="generatePresentation()">🎬 Gerar apresentação</button></div>
+<div id="presentationResult" style="margin-top:15px"></div>
+</section>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const DBKEY='dedalos_rh_final_2026';
+let db=JSON.parse(localStorage.getItem(DBKEY)||'null')||{periods:{}};
+let charts={};
+
+function save(){localStorage.setItem(DBKEY,JSON.stringify(db))}
+function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
+function normalize(x){return String(x??'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase().replace(/\\s+/g,' ').trim()}
+function periodLabel(p){if(!p)return '';let [y,m]=p.split('-');return new Date(+y,+m-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase())}
+function timeToMinutes(v){if(v==null||v==='')return 0;if(typeof v==='number')return Math.round(v*1440);let s=String(v).trim();let m=s.match(/(\\d+)\\s*days?,\\s*(\\d+):(\\d{2})/i);if(m)return +m[1]*1440 + +m[2]*60 + +m[3];m=s.match(/^(\\d{1,3}):(\\d{2})$/);return m?+m[1]*60 + +m[2]:0}
+function showTime(v){v=Math.max(0,Math.round(Number(v)||0));return Math.floor(v/60)+'h'+String(v%60).padStart(2,'0')}
+function allPeriods(){return Object.keys(db.periods).sort()}
+function ensurePeriod(p){if(p&&!db.periods[p])db.periods[p]={files:[],records:[]}}
+function allRecords(){return allPeriods().flatMap(p=>db.periods[p].records||[])}
+function recordsFor(p,company='',dept=''){return (db.periods[p]?.records||[]).filter(r=>(!company||r.company===company)&&(!dept||r.department===dept))}
+function destroy(name){if(charts[name])charts[name].destroy()}
+function makeChart(name,element,type,data,options){destroy(name);charts[name]=new Chart(document.getElementById(element),{type,data,options:{responsive:true,maintainAspectRatio:false,...options}})}
+
+function refreshAll(){
+ let ps=allPeriods();
+ ['periodFilter','presentationPeriod'].forEach(x=>{let el=document.getElementById(x),old=el.value;el.innerHTML=ps.map(p=>`<option value="${p}">${periodLabel(p)}</option>`).join('');if(ps.includes(old))el.value=old});
+ let rs=allRecords(),companies=[...new Set(rs.map(r=>r.company).filter(Boolean))].sort(),depts=[...new Set(rs.map(r=>r.department).filter(Boolean))].sort();
+ ['companyFilter','presentationCompany'].forEach(x=>{let el=document.getElementById(x),old=el.value;el.innerHTML='<option value="">Todas</option>'+companies.map(v=>`<option>${v}</option>`).join('');if(companies.includes(old))el.value=old});
+ ['departmentFilter','presentationDepartment'].forEach(x=>{let el=document.getElementById(x),old=el.value;el.innerHTML='<option value="">Todos</option>'+depts.map(v=>`<option>${v}</option>`).join('');if(depts.includes(old))el.value=old});
+ renderFiles();renderPeriods();renderCompareList();renderDashboard();
+}
+
+function renderDashboard(){
+ let p=document.getElementById('periodFilter').value||allPeriods().at(-1),c=document.getElementById('companyFilter').value,d=document.getElementById('departmentFilter').value,rs=recordsFor(p,c,d);
+ let extra=rs.reduce((a,r)=>a+r.extra,0),absence=rs.reduce((a,r)=>a+r.absence,0),abono=rs.reduce((a,r)=>a+r.abono,0),worked=rs.reduce((a,r)=>a+r.worked,0);
+ document.getElementById('kpis').innerHTML=[['👥','Funcionários',rs.length],['⏱️','Horas extras',showTime(extra)],['❌','Faltas',showTime(absence)],['🩺','Abonos/atestados',showTime(abono)],['🕒','Horas trabalhadas',showTime(worked)]].map(x=>`<div class="card"><div class="klabel">${x[0]} ${x[1]}</div><div class="kpi">${x[2]}</div></div>`).join('');
+ let dep={};rs.forEach(r=>dep[r.department||'Sem departamento']=(dep[r.department||'Sem departamento']||0)+1);
+ makeChart('dept','deptChart','bar',{labels:Object.keys(dep),datasets:[{label:'Funcionários',data:Object.values(dep)}]},{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}});
+ makeChart('indicator','indicatorChart','bar',{labels:['Horas extras','Faltas','Abonos/atestados'],datasets:[{label:'Horas',data:[extra,absence,abono]}]},{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}});
+ let ex=[...rs].sort((a,b)=>b.extra-a.extra),ab=[...rs].sort((a,b)=>b.absence-a.absence);
+ makeChart('extra','extraChart','bar',{labels:ex.map(r=>r.name),datasets:[{label:'Horas extras',data:ex.map(r=>r.extra)}]},{indexAxis:'y',scales:{x:{beginAtZero:true},y:{ticks:{autoSkip:false}}}});
+ makeChart('absence','absenceChart','bar',{labels:ab.map(r=>r.name),datasets:[{label:'Faltas',data:ab.map(r=>r.absence)}]},{indexAxis:'y',scales:{x:{beginAtZero:true},y:{ticks:{autoSkip:false}}}});
+}
+
+function renderFiles(){
+ let arr=allPeriods().flatMap(p=>(db.periods[p].files||[]).map(f=>({...f,period:p}))),el=document.getElementById('filesList');
+ if(!arr.length){el.innerHTML='<div class="empty">Nenhum arquivo processado.</div>';return}
+ el.innerHTML=arr.map(f=>`<div class="file"><div><b>${f.name}</b><br><span class="muted">${periodLabel(f.period)} · ${f.type} · ${f.count} registro(s)</span></div><button class="danger" onclick="deleteFile('${f.period}','${f.id}')">🗑️ Excluir</button></div>`).join('');
+}
+function renderPeriods(){
+ let el=document.getElementById('periodsList'),ps=allPeriods();
+ el.innerHTML=ps.length?'<div class="table"><table><tr><th>Período</th><th>Funcionários</th><th>Arquivos</th><th>Ação</th></tr>'+ps.map(p=>`<tr><td>${periodLabel(p)}</td><td>${db.periods[p].records.length}</td><td>${db.periods[p].files.length}</td><td><button class="danger" onclick="deletePeriod('${p}')">Excluir</button></td></tr>`).join('')+'</table></div>':'<div class="empty">Nenhum período processado.</div>';
+}
+function renderCompareList(){document.getElementById('compareList').innerHTML=allPeriods().map(p=>`<label><input type="checkbox" class="compare" value="${p}"> ${periodLabel(p)}</label>`).join('')}
+function deleteFile(p,fileId){if(!confirm('Excluir este arquivo e os dados gerados por ele?'))return;db.periods[p].files=db.periods[p].files.filter(f=>f.id!==fileId);db.periods[p].records=db.periods[p].records.filter(r=>r.source!==fileId);if(!db.periods[p].files.length&&!db.periods[p].records.length)delete db.periods[p];save();refreshAll()}
+function deletePeriod(p){if(!confirm('Excluir este período e todos os seus arquivos?'))return;delete db.periods[p];save();refreshAll()}
+
+async function readPdf(file){
+ let pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise, records=[];
+ for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+  let page=await pdf.getPage(pageNo),content=await page.getTextContent(),text=content.items.map(i=>i.str).join(' ');
+  let period=text.match(/Per[ií]odo de\\s+(\\d{2})\\/(\\d{2})\\/(\\d{4})\\s+[àa]\\s+(\\d{2})\\/(\\d{2})\\/(\\d{4})/i);
+  let p=period?`${period[6]}-${period[5]}`:null;
+  let nm=text.match(/Funcion[aá]rio:\\s*\\d+\\s*-\\s*(.*?)\\s+Matr[ií]cula:/i);
+  let dep=text.match(/Departamento:\\s*(.*?)\\s+Fun[cç][aã]o:/i);
+  let emp=text.match(/Empresa:\\s*(.*?)\\s+CNPJ:/i);
+  let worked=text.match(/Trabalhadas\\s+(\\d{1,3}:\\d{2})/i);
+  let extras=text.match(/Extras\\s+(\\d{1,3}:\\d{2})/i);
+  let faltas=text.match(/Faltas\\s+(\\d{1,3}:\\d{2})/i);
+  let abonos=text.match(/Abonos\\s+\\d+\\s+(\\d{1,3}:\\d{2})/i);
+  if(p&&nm)records.push({period:p,name:nm[1].replace(/\\s+/g,' ').trim(),company:(emp?.[1]||'').trim(),department:(dep?.[1]||'').trim(),shift:['MELISSA','YASMIN','JOAO','JOÃO'].includes(normalize(nm[1]))?'Meio turno':'Turno integral',expected:['MELISSA','YASMIN','JOAO','JOÃO'].includes(normalize(nm[1]))?88:176,worked:timeToMinutes(worked?.[1]),extra:timeToMinutes(extras?.[1]),absence:timeToMinutes(faltas?.[1]),abono:timeToMinutes(abonos?.[1]),sourceType:'PDF'});
+ }
+ return records;
+}
+
+function excelDateToPeriod(v){
+ if(v instanceof Date)return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}`;
+ let s=String(v??'');let m=s.match(/(20\\d{2})[-/]([01]?\\d)/);return m?`${m[1]}-${String(m[2]).padStart(2,'0')}`:null;
+}
+function readExcel(wb){
+ let records=[];
+ for(let sheet of wb.SheetNames){
+  let rows=XLSX.utils.sheet_to_json(wb.Sheets[sheet],{header:1,raw:true,defval:''});
+  let text=rows.flat().map(x=>String(x)).join(' ');
+  let p=null;
+  for(let row of rows)for(let v of row){p=excelDateToPeriod(v);if(p)break;if(p)break}
+  if(!p)continue;
+  let name=String(rows[1]?.[3]||sheet).trim();
+  if(!name||/^(DATA|TOTAL|HORAS)/i.test(name))name=sheet;
+  let worked=0,extra=0;
+  for(let row of rows){
+   let joined=row.map(x=>String(x)).join(' ');
+   if(/TOTAL/i.test(joined)&&!worked){let vals=row.map(v=>typeof v==='number'?Math.round(v*1440):timeToMinutes(v));worked=vals.reduce((a,b)=>a+b,0)}
+   if(/HORA[S]? EXTRA[S]?/i.test(joined)){let vals=row.map(v=>typeof v==='number'?Math.round(v*1440):timeToMinutes(v));extra=Math.max(extra, ...vals)}
+  }
+  let meio=['MELISSA','YASMIN','JOAO','JOÃO'].includes(normalize(name));
+  records.push({period:p,name,company:'',department:'',shift:meio?'Meio turno':'Turno integral',expected:meio?88:176,worked,extra,absence:0,abono:0,sourceType:'Excel'});
+ }
+ return records;
+}
+
+async function processFiles(){
+ let files=[...document.getElementById('fileInput').files];if(!files.length){alert('Selecione os arquivos primeiro.');return}
+ let status=document.getElementById('status'),total=0,errors=[];
+ for(let i=0;i<files.length;i++){
+  let file=files[i];status.textContent=`Processando ${i+1} de ${files.length}: ${file.name}\\nLendo o arquivo...`;
+  try{
+   let recs=/\\.pdf$/i.test(file.name)?await readPdf(file):readExcel(XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}));
+   if(!recs.length){errors.push(file.name+' — nenhum registro reconhecido');continue}
+   let by={};recs.forEach(r=>(by[r.period]??=[]).push(r));
+   for(let p of Object.keys(by)){ensurePeriod(p);let fid=id();db.periods[p].files.push({id:fid,name:file.name,type:/\\.pdf$/i.test(file.name)?'PDF':'Excel',count:by[p].length});db.periods[p].records.push(...by[p].map(r=>({...r,source:fid})))}total+=recs.length;save();
+   status.textContent+=`\\n✅ ${recs.length} registro(s) reconhecido(s).`;
+  }catch(e){console.error(e);errors.push(file.name+' — '+(e.message||'erro desconhecido'))}
+ }
+ save();refreshAll();document.querySelector('[data-page="dashboard"]').click();
+ status.textContent=`✅ PROCESSAMENTO CONCLUÍDO\\n${total} registro(s) importado(s).`+(errors.length?'\\n\\n⚠️ Arquivos com problema:\\n'+errors.join('\\n'):'\\nDashboard atualizado com sucesso.');
+ if(!total)alert('Nenhum dado foi reconhecido. Veja a mensagem na área de processamento.');
+}
+
+function renderComparison(){
+ let ps=[...document.querySelectorAll('.compare:checked')].map(x=>x.value);if(ps.length<2)return alert('Selecione pelo menos dois períodos.');
+ let vals=ps.map(p=>{let r=recordsFor(p);return{extra:r.reduce((a,x)=>a+x.extra,0),absence:r.reduce((a,x)=>a+x.absence,0),abono:r.reduce((a,x)=>a+x.abono,0)}});
+ makeChart('comparison','comparisonChart','line',{labels:ps.map(periodLabel),datasets:[{label:'Horas extras',data:vals.map(x=>x.extra)},{label:'Faltas',data:vals.map(x=>x.absence)},{label:'Abonos/atestados',data:vals.map(x=>x.abono)}]},{scales:{y:{beginAtZero:true}}});
+}
+
+function generatePresentation(){
+ let p=document.getElementById('presentationPeriod').value,c=document.getElementById('presentationCompany').value,d=document.getElementById('presentationDepartment').value,r=recordsFor(p,c,d),m=[...document.querySelectorAll('.metric:checked')].map(x=>x.value),extra=r.reduce((a,x)=>a+x.extra,0),absence=r.reduce((a,x)=>a+x.absence,0),abono=r.reduce((a,x)=>a+x.abono,0),html=`<div class="presentation"><h1>Relatório de RH — ${periodLabel(p)}</h1><p class="muted">Dados selecionados para apresentação aos gestores.</p>`;
+ if(m.includes('summary'))html+=`<div class="grid g4" style="margin:18px 0">${[['Funcionários',r.length],['Horas extras',showTime(extra)],['Faltas',showTime(absence)],['Abonos/atestados',showTime(abono)]].map(x=>`<div class="card"><b>${x[0]}</b><div class="kpi">${x[1]}</div></div>`).join('')}</div>`;
+ if(m.includes('department')){let q={};r.forEach(x=>q[x.department||'Sem departamento']=(q[x.department||'Sem departamento']||0)+1);html+=`<div class="card"><h2>Funcionários por departamento</h2><table><tr><th>Departamento</th><th>Funcionários</th></tr>${Object.entries(q).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table></div>`}
+ if(m.includes('extra'))html+=`<div class="card" style="margin-top:15px"><h2>Horas extras por funcionário</h2><table><tr><th>Funcionário</th><th>Empresa</th><th>Departamento</th><th>Horas extras</th></tr>${[...r].sort((a,b)=>b.extra-a.extra).map(x=>`<tr><td>${x.name}</td><td>${x.company||'—'}</td><td>${x.department||'—'}</td><td>${showTime(x.extra)}</td></tr>`).join('')}</table></div>`;
+ if(m.includes('absence'))html+=`<div class="card" style="margin-top:15px"><h2>Faltas por funcionário</h2><table><tr><th>Funcionário</th><th>Empresa</th><th>Departamento</th><th>Faltas</th></tr>${[...r].sort((a,b)=>b.absence-a.absence).map(x=>`<tr><td>${x.name}</td><td>${x.company||'—'}</td><td>${x.department||'—'}</td><td>${showTime(x.absence)}</td></tr>`).join('')}</table></div>`;
+ document.getElementById('presentationResult').innerHTML=html+'</div>';
+}
+
+function downloadBackup(){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));a.download='backup-rh-dedalos.json';a.click()}
+function restoreBackup(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{db=JSON.parse(r.result);save();refreshAll();alert('Backup restaurado.')}catch{alert('Backup inválido.')}};r.readAsText(f)}
+
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.getElementById(t.dataset.page).classList.add('active')});
+if(!allPeriods()){let d=new Date(),p=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;ensurePeriod(p);save()}
+refreshAll();
+</script>
+</body>
+</html>
